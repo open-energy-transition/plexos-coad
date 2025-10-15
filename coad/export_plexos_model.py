@@ -543,32 +543,14 @@ def create_csv_dict(
     return csv_dict, tagset
 
 
-def write_time_varying_properties(coad_obj, folder="", interesting_objs=None):
-    """Export properties with temporal metadata (date_from, date_to, timeslice) to CSV.
+def get_time_varying_data(cur, obj_list_super, prefix=""):
+    """Query database for time-varying properties (date_from, date_to, timeslice).
 
-    The database schema differs between exports; try queries with and without the
-    `t_` prefixes. If the t_ tables exist, use those; otherwise fall back to
-    unprefixed table names.
+    Returns list of row tuples and column names, or (None, None) if no data found.
+    Follows the same batching pattern as other data collection functions.
     """
-    if folder is None or folder == "":
-        folder = coad_obj.meta.get("name", "")
-    if not os.path.isdir(folder):
-        os.makedirs(folder, exist_ok=True)
-
-    cur = coad_obj.coad.dbcon.cursor()
-
-    # If no interesting_objs provided, do nothing (we want to restrict to reported objects)
-    if not interesting_objs:
-        print("No interesting objects provided, skipping time_varying_properties.csv")
-        return
-
-    # Detect whether DB tables are prefixed with t_
-    prefix = ""
-    try:
-        cur.execute("SELECT 1 FROM t_class LIMIT 1")
-        prefix = "t_"
-    except Exception:
-        prefix = ""
+    if not obj_list_super:
+        return None, None
 
     # Find the Timeslice class id dynamically by name
     timeslice_class_id = None
@@ -588,14 +570,15 @@ def write_time_varying_properties(coad_obj, folder="", interesting_objs=None):
             if row:
                 timeslice_class_id = row[0]
     except Exception:
-        timeslice_class_id = None
+        pass
 
-    # Prepare to batch the query to avoid large IN (...) lists
+    # Batch the query to avoid large IN (...) lists (same pattern as create_csv_dict)
     rows_all = []
     cols = None
-    delta = 900
-    obj_list_super = list(interesting_objs)
-    for istart in range(0, len(obj_list_super), delta):
+    delta = 999  # match the delta used in create_csv_dict
+    istart = 0
+
+    while istart < len(obj_list_super):
         batch = obj_list_super[istart : istart + delta]
         placeholders = ",".join(["?"] * len(batch))
 
@@ -625,9 +608,7 @@ def write_time_varying_properties(coad_obj, folder="", interesting_objs=None):
             % placeholders
         )
 
-        params = []
-        # first param corresponds to the CASE WHEN ? (timeslice_class_id). Use -1 if None so comparison fails.
-        params.append(timeslice_class_id if timeslice_class_id is not None else -1)
+        params = [timeslice_class_id if timeslice_class_id is not None else -1]
         params.extend(batch)
 
         try:
@@ -637,44 +618,36 @@ def write_time_varying_properties(coad_obj, folder="", interesting_objs=None):
                 rows_all.extend(fetched)
                 if cols is None:
                     cols = [d[0] for d in cur.description]
-        except Exception as e:
-            # If this batch fails (schema mismatch), try without prefix as fallback if we used prefix
-            if prefix == "t_":
-                try:
-                    # try again without prefix for this batch
-                    query_nop = query.replace("t_", "")
-                    cur.execute(query_nop, params)
-                    fetched = cur.fetchall()
-                    if fetched:
-                        rows_all.extend(fetched)
-                        if cols is None:
-                            cols = [d[0] for d in cur.description]
-                    continue
-                except Exception:
-                    print("Failed batch query for time-varying properties:", e)
-                    continue
-            else:
-                print("Failed batch query for time-varying properties:", e)
-                continue
+        except Exception:
+            # Silent failure for individual batches - continue processing
+            pass
 
-    if not rows_all or cols is None:
-        print(
-            "No time-varying property rows found for the requested objects (skipping time_varying_properties.csv)"
-        )
+        istart += delta
+
+    return rows_all if rows_all else None, cols
+
+
+def write_time_varying_csv(rows, cols, folder):
+    """Write time-varying properties data to CSV.
+
+    Follows the same pattern as write_csv_dict but for row-based data.
+    """
+    if not rows or not cols:
         return
 
-    # Build DataFrame and write CSV
+    filename = os.path.join(folder, "Time varying properties.csv")
+    print("Writing %s" % filename)
+
     try:
-        df = pd.DataFrame(rows_all, columns=cols)
+        df = pd.DataFrame(rows, columns=cols)
+        # Normalize values column: decode bytes if needed
         if "value" in df.columns:
             df["value"] = df["value"].apply(
                 lambda x: x.decode() if isinstance(x, (bytes, bytearray)) else x
             )
-        outpath = os.path.join(folder, "time_varying_properties.csv")
-        df.to_csv(outpath, index=False)
-        print("Wrote", outpath)
+        df.to_csv(filename, index=False)
     except Exception as e:
-        print("Failed to write time_varying_properties.csv:", e)
+        print("Failed to write Time varying properties.csv:", e)
 
 
 def create_class_map(cur, interesting_objs):
@@ -710,28 +683,36 @@ def write_object_report(coad_obj, interesting_objs=None, folder=None):
     if not os.path.isdir(folder):
         print("Creating report folder %s" % folder)
         os.makedirs(folder)
+
+    # Detect whether DB tables are prefixed with t_
+    prefix = ""
+    try:
+        cur.execute("SELECT 1 FROM t_class LIMIT 1")
+        prefix = "t_"
+    except Exception:
+        prefix = ""
+
     # Create class mapping dict
     class_map = create_class_map(cur, interesting_objs)
     all_interesting_objs = set(
         [item for sublist in class_map.values() for item in sublist]
     ) | set([1])
     tagset = set()
+
+    # Write main object class CSVs
     for cls_name, obj_list_super in class_map.items():
-        # for obj_id in class_map[cls_name]:
         csv_dict, tagset = create_csv_dict(
             coad_obj, cls_name, cur, obj_list_super, all_interesting_objs, tagset
         )
         write_csv_dict(coad_obj, cur, csv_dict, folder, cls_name)
-    # print class_map
 
-    # do it again for the objects identified with tags
+    # Do it again for the objects identified with tags (first pass)
     tag_class_map = create_class_map(cur, tagset)
     tag_all_interesting_objs = set(
         [item for sublist in tag_class_map.values() for item in sublist]
     )
     tag_tagset = set()
     for tag_cls_name, tag_obj_list_super in tag_class_map.items():
-        # for obj_id in class_map[cls_name]:
         tag_csv_dict, tag_tagset = create_csv_dict(
             coad_obj,
             tag_cls_name,
@@ -742,14 +723,13 @@ def write_object_report(coad_obj, interesting_objs=None, folder=None):
         )
         write_csv_dict(coad_obj, cur, tag_csv_dict, folder, tag_cls_name)
 
-    # do it again for the objects identified with tags
+    # Do it again for the objects identified with tags (second pass)
     tag_class_map = create_class_map(cur, tagset)
     tag_all_interesting_objs = set(
         [item for sublist in tag_class_map.values() for item in sublist]
     )
     tag_tagset = set()
     for tag_cls_name, tag_obj_list_super in tag_class_map.items():
-        # for obj_id in class_map[cls_name]:
         tag_csv_dict, tag_tagset = create_csv_dict(
             coad_obj,
             tag_cls_name,
@@ -760,13 +740,12 @@ def write_object_report(coad_obj, interesting_objs=None, folder=None):
         )
         write_csv_dict(coad_obj, cur, tag_csv_dict, folder, tag_cls_name)
 
-    # Export any time-varying properties (date_from, date_to, timeslice, etc.)
-    try:
-        write_time_varying_properties(
-            coad_obj, folder=folder, interesting_objs=all_interesting_objs
-        )
-    except Exception as e:
-        print("Failed to write time_varying_properties.csv:", e)
+    # Collect and write time-varying properties for all interesting objects
+    # This follows the same pattern: collect data, then write
+    obj_list_all = list(all_interesting_objs)
+    rows, cols = get_time_varying_data(cur, obj_list_all, prefix=prefix)
+    if rows and cols:
+        write_time_varying_csv(rows, cols, folder)
 
 
 def main():
