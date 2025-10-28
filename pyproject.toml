@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plexos-coad-oet"
+version = "0.1.0"
+description = "Class-Object-Attribute Data manipulation tools for PLEXOS models."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Harry Sorensen", email = "harry.sorensen@nrel.gov" }
+]
+maintainers = [
+  { name = "Open Energy Transition", email = "info@openenergytransition.org" }
+]
+requires-python = ">=3.8"
+keywords = ["PLEXOS", "energy", "modelling", "sqlite"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: BSD License",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering"
+]
+dependencies = [
+  "numpy",
+  "pandas",
+  "h5py"
+]
+
+[project.optional-dependencies]
+mongo = ["pymongo"]
+
+[project.urls]
+Homepage = "https://github.com/open-energy-transition/plexos-coad"
+Repository = "https://github.com/open-energy-transition/plexos-coad"
+"Bug Tracker" = "https://github.com/open-energy-transition/plexos-coad/issues"
+Upstream = "https://github.com/Computational-Energy/plexos-coad"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["coad*"]
+exclude = ["coad.test", "coad.test.*"]
+
+[tool.setuptools.package-data]
+coad = ["*.xml", "*.txt", "*.md"]
