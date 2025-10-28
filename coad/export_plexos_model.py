@@ -1,11 +1,11 @@
 import argparse
 import csv
-import numpy as np
 import os
-import pandas as pd
 import sys
 
-#silly type checking thin
+import pandas as pd
+
+# silly type checking thin
 try:
     basestring
 except NameError:
@@ -30,228 +30,283 @@ except NameError:
 # TODO: add scenario read order (default=0, if == 0: read_order='alphabetical')
 #   so that conflicting property/attribute definitions use the data defined by the higher read order
 
-def get_model_items(coad,models, filter_val = '',filter_cls = 'Region'):
-    #right now this only works for a single model in the models list. It runs with multiple,
+
+def get_model_items(coad, models, filter_val="", filter_cls="Region"):
+    # right now this only works for a single model in the models list. It runs with multiple,
     # but the resulting data isn't easily mapped back to the original model.
     # ... could replace [models] with model and remove for loop, or
     # enable model specfication in export_data...
 
-    if filter_val != '':
+    if filter_val != "":
         try:
             regions = [coad[filter_cls][filter_val]]
         except:
-            if filter_cls=='Region':
-                filter_cls = 'Zone'
+            if filter_cls == "Region":
+                filter_cls = "Zone"
             else:
-                filter_cls = 'Region'
+                filter_cls = "Region"
 
         try:
             regions = [coad[filter_cls][filter_val]]
         except:
-            regions = ['']
-            print('Cannot find filter in Regions or Zones')
+            regions = [""]
+            print("Cannot find filter in Regions or Zones")
     else:
-        regions = ['']
-
+        regions = [""]
 
     objects = []
     scenarios = []
 
-    if models == ['']:
-        sys.exit('Please specify a model to export')
+    if models == [""]:
+        sys.exit("Please specify a model to export")
 
     for mod in models:
-        #all possible objects in a PLEXOS model
+        # all possible objects in a PLEXOS model
         all_fields = set(coad.keys())
 
-        #objects with explicitly defined memberships to the model
-        all_children = set([o.hierarchy for o in coad['Model'][mod].get_children()])
+        # objects with explicitly defined memberships to the model
+        all_children = set([o.hierarchy for o in coad["Model"][mod].get_children()])
 
-        #scenarios to gather
-        scen = set([o.hierarchy for o in coad['Model'][mod].get_children('Scenario')])
-        scenarios.extend([i.split('.',1)[1] for i in scen])
+        # scenarios to gather
+        scen = set([o.hierarchy for o in coad["Model"][mod].get_children("Scenario")])
+        scenarios.extend([i.split(".", 1)[1] for i in scen])
 
-        #objects with model membership (without scenarios)
-        settings = all_children-scen
+        # objects with model membership (without scenarios)
+        settings = all_children - scen
 
-        #parameters = [i.split('.',1)[0] for i in settings]
-        #settings = [i.split('.',1)[1] for i in settings]
+        # parameters = [i.split('.',1)[0] for i in settings]
+        # settings = [i.split('.',1)[1] for i in settings]
 
         for s in settings:
-            objects.append({'cls': s.split('.',1)[0],
-                                'name': s.split('.',1)[1]})
+            objects.append({"cls": s.split(".", 1)[0], "name": s.split(".", 1)[1]})
 
-
-    #get all the data files associated with the scenarios
+    # get all the data files associated with the scenarios
     data_files = []
-    for data_file in coad['Data File']: #loop through every data file and only grab the ones that are active
-        for text in coad['Data File'][data_file].get_text():
-            if text in ['Scenario.' + s for s in scenarios] + ['System.System'] :
-                data_files.append({'cls': coad['Data File'][data_file].get_class().meta['name'],'name': coad['Data File'][data_file].meta['name']})
+    for data_file in coad[
+        "Data File"
+    ]:  # loop through every data file and only grab the ones that are active
+        for text in coad["Data File"][data_file].get_text():
+            if text in ["Scenario." + s for s in scenarios] + ["System.System"]:
+                data_files.append(
+                    {
+                        "cls": coad["Data File"][data_file].get_class().meta["name"],
+                        "name": coad["Data File"][data_file].meta["name"],
+                    }
+                )
 
-
-
-    #get all relatives of filter region/zone
-    if regions == ['']:
-        regions = coad[filter_cls].values() # + coad['Zone'].values()
+    # get all relatives of filter region/zone
+    if regions == [""]:
+        regions = coad[filter_cls].values()  # + coad['Zone'].values()
 
         for cls in coad.keys():
             for n in coad[cls].keys():
-                objects.append({'cls':cls,'name':n})
-
+                objects.append({"cls": cls, "name": n})
 
     else:
         for r in regions:
-            #print(filter_cls + ':  ' + r.meta['name'])
+            # print(filter_cls + ':  ' + r.meta['name'])
             for p in r.get_parents():
-                #print('    parent: ' + p.meta['name'])
-                objects.append({#'relationship': 'parent',
-                                    'cls': p.get_class().meta['name'],
-                                    'name': p.meta['name']})
-                                    #,'obj': p})
-                if p.meta['name'] != 'System':
+                # print('    parent: ' + p.meta['name'])
+                objects.append(
+                    {  #'relationship': 'parent',
+                        "cls": p.get_class().meta["name"],
+                        "name": p.meta["name"],
+                    }
+                )
+                # ,'obj': p})
+                if p.meta["name"] != "System":
                     for pp in p.get_children():
-                        objects.append({#'relationship': 'child',
-                                    'cls': pp.get_class().meta['name'],
-                                    'name': pp.meta['name']})
-                                    #,'obj': pp})
+                        objects.append(
+                            {  #'relationship': 'child',
+                                "cls": pp.get_class().meta["name"],
+                                "name": pp.meta["name"],
+                            }
+                        )
+                        # ,'obj': pp})
                 for pp in p.get_parents():
-                    objects.append({#'relationship': 'parent',
-                                'cls': pp.get_class().meta['name'],
-                                'name': pp.meta['name']})
-                                #,'obj': pp})
+                    objects.append(
+                        {  #'relationship': 'parent',
+                            "cls": pp.get_class().meta["name"],
+                            "name": pp.meta["name"],
+                        }
+                    )
+                    # ,'obj': pp})
 
-
-    print('Done Collecting Objects, removing duplicates...')
+    print("Done Collecting Objects, removing duplicates...")
     # drop the duplicates
-    objects = pd.DataFrame(objects).drop_duplicates().reset_index(drop=True) #.T.to_dict().values()
+    objects = (
+        pd.DataFrame(objects).drop_duplicates().reset_index(drop=True)
+    )  # .T.to_dict().values()
     if len(data_files):
-        objects.drop(objects.index[(objects['cls']=='Data File') & (~objects['name'].isin([x['name'] for x in data_files]))],inplace=True)
+        objects.drop(
+            objects.index[
+                (objects["cls"] == "Data File")
+                & (~objects["name"].isin([x["name"] for x in data_files]))
+            ],
+            inplace=True,
+        )
     else:
-        objects.drop(objects.index[objects['cls']=='Data File'],inplace=True)
+        objects.drop(objects.index[objects["cls"] == "Data File"], inplace=True)
 
-    print('Done')
+    print("Done")
 
-    export_objects = {'objects':objects,'scenarios':scenarios,'data_files':list(data_files),'models':models}
-    return(export_objects)
+    export_objects = {
+        "objects": objects,
+        "scenarios": scenarios,
+        "data_files": list(data_files),
+        "models": models,
+    }
+    return export_objects
 
 
 def export_data(coad, export_objects):
     # this is really slow, I think due to the get_properties, get_children, and get_parents calls
     d = []
 
-    nobj = len(export_objects['objects'])
-    for index, row in export_objects['objects'].iterrows():
-        #clear_output()
-        #print('{0}/{1}'.format(index,nobj))
-        obj_class = row['cls']
-        obj_name = row['name']
-        if not(obj_class=='System' and obj_name=='System'):
-            #print(obj_class,obj_name)
+    nobj = len(export_objects["objects"])
+    for index, row in export_objects["objects"].iterrows():
+        # clear_output()
+        # print('{0}/{1}'.format(index,nobj))
+        obj_class = row["cls"]
+        obj_name = row["name"]
+        if not (obj_class == "System" and obj_name == "System"):
+            # print(obj_class,obj_name)
             obj = coad[obj_class][obj_name]
             if obj.keys():
                 for atr, val in obj.items():
-                    d.append({'cls': obj_class,
-                                         'object': obj_name,
-                                         'property': atr,
-                                         'value': val})
-            #relationships
+                    d.append(
+                        {
+                            "cls": obj_class,
+                            "object": obj_name,
+                            "property": atr,
+                            "value": val,
+                        }
+                    )
+            # relationships
             all_children = set([o.hierarchy for o in obj.get_children()])
             all_parents = set([o.hierarchy for o in obj.get_parents()])
             children = all_children - all_parents
             parents = all_parents - all_children
             peers = all_children & all_parents
 
-            #parents
+            # parents
             if len(parents):
                 for p in parents:
-                    p_cls, p_val = p.split('.',1)
-                    if (p_cls == 'Model' and p_val in export_objects['models']) or p_cls != 'Model':
-                        d.append({'cls': obj_class,
-                                         'object': obj_name,
-                                         'property': p_cls,
-                                         'value': p_val})
-            #peers
+                    p_cls, p_val = p.split(".", 1)
+                    if (
+                        p_cls == "Model" and p_val in export_objects["models"]
+                    ) or p_cls != "Model":
+                        d.append(
+                            {
+                                "cls": obj_class,
+                                "object": obj_name,
+                                "property": p_cls,
+                                "value": p_val,
+                            }
+                        )
+            # peers
             if len(peers):
                 for p in peers:
-                    p_cls, p_val = p.split('.',1)
-                    d.append({'cls': obj_class,
-                                     'object': obj_name,
-                                     'property': p_cls,
-                                     'value': p_val})
-            #children
+                    p_cls, p_val = p.split(".", 1)
+                    d.append(
+                        {
+                            "cls": obj_class,
+                            "object": obj_name,
+                            "property": p_cls,
+                            "value": p_val,
+                        }
+                    )
+            # children
             if len(children):
                 for p in children:
-                    p_cls, p_val = p.split('.',1)
-                    d.append({'cls': obj_class,
-                                     'object': obj_name,
-                                     'property': p_cls,
-                                     'value': p_val})
+                    p_cls, p_val = p.split(".", 1)
+                    d.append(
+                        {
+                            "cls": obj_class,
+                            "object": obj_name,
+                            "property": p_cls,
+                            "value": p_val,
+                        }
+                    )
 
             # Properties
             props = obj.get_properties()
             if len(props):
                 props = pd.DataFrame(props).stack().reset_index()
-                props.columns = ['property','scenario','value']
-                props['cls'] = obj_class
-                props['object'] = obj_name
-                for item in props.to_dict('records'):
+                props.columns = ["property", "scenario", "value"]
+                props["cls"] = obj_class
+                props["object"] = obj_name
+                for item in props.to_dict("records"):
                     d.append(item)
 
             # Text
             props = obj.get_text()
             if len(props):
                 props = pd.DataFrame(props).stack().reset_index()
-                props.columns = ['property','scenario','value']
-                props['cls'] = obj_class
-                props['object'] = obj_name
-                for item in props.to_dict('records'):
+                props.columns = ["property", "scenario", "value"]
+                props["cls"] = obj_class
+                props["object"] = obj_name
+                for item in props.to_dict("records"):
                     d.append(item)
 
-
-
     d = pd.DataFrame(d)
-    d['scenario'].loc[(d['scenario']=='') | d['scenario'].isnull()] = 'System.System'
-    d.drop(d.index[d['value']=='System'],inplace=True)
-    d.drop(d.index[~d['scenario'].isin(['Data File.' + s['name'] for s in export_objects['data_files']] + ['Scenario.' + s for s in export_objects['scenarios']] + ['System.System'])],inplace=True)
+    d["scenario"].loc[(d["scenario"] == "") | d["scenario"].isnull()] = "System.System"
+    d.drop(d.index[d["value"] == "System"], inplace=True)
+    d.drop(
+        d.index[
+            ~d["scenario"].isin(
+                ["Data File." + s["name"] for s in export_objects["data_files"]]
+                + ["Scenario." + s for s in export_objects["scenarios"]]
+                + ["System.System"]
+            )
+        ],
+        inplace=True,
+    )
     d.value = d.value.apply(lambda x: tuple(x) if type(x) is list else x)
-    return(d)
+    return d
 
-def write_tables(data,folder=''):
-    #write readable csv files for each data class
+
+def write_tables(data, folder=""):
+    # write readable csv files for each data class
 
     def f(x):
-        if any(x.columns.str.contains('scenario')):
-            if len(x.scenario.unique())>1:
-                y = dict(x[['scenario','value']].to_dict('split')['data'])
+        if any(x.columns.str.contains("scenario")):
+            if len(x.scenario.unique()) > 1:
+                y = dict(x[["scenario", "value"]].to_dict("split")["data"])
             else:
-                y=tuple(x.value)
+                y = tuple(x.value)
         else:
-            y=tuple(x.value)
-        return(y)
-
+            y = tuple(x.value)
+        return y
 
     for cls in data.cls.unique():
-        #df = data.loc[data['cls']==cls].groupby(['object', 'property'])['value'].apply(lambda x: tuple(x)).reset_index()\
+        # df = data.loc[data['cls']==cls].groupby(['object', 'property'])['value'].apply(lambda x: tuple(x)).reset_index()\
         #        .pivot(index='object', columns='property', values='value').fillna('')
-        df = data.loc[data['cls']==cls].groupby(['object', 'property']).apply(f).reset_index()\
-                .pivot(index='object', columns='property').fillna('')
+        df = (
+            data.loc[data["cls"] == cls]
+            .groupby(["object", "property"])
+            .apply(f)
+            .reset_index()
+            .pivot(index="object", columns="property")
+            .fillna("")
+        )
         df = df.applymap(lambda x: x[0] if (len(x) == 1) else x)
         df.columns = df.columns.droplevel(0)
-        df.to_csv(os.path.join(folder,cls+'.csv'))
+        df.to_csv(os.path.join(folder, cls + ".csv"))
+
 
 def get_related_objects(coad_obj, obj_id, obj_set=None):
     """Recursively get all object related to passed object
-        Searches:
-            - children in membership
-            - tagged data
+    Searches:
+        - children in membership
+        - tagged data
 
-        The system object (obj_id = 1) is ignored in all cases
+    The system object (obj_id = 1) is ignored in all cases
 
-        Return set of obj_ids with duplicates removed
+    Return set of obj_ids with duplicates removed
     """
 
-    if obj_id == '1':
+    if obj_id == "1":
         # Ignore System object
         return obj_set
     cur = coad_obj.dbcon.cursor()
@@ -261,15 +316,20 @@ def get_related_objects(coad_obj, obj_id, obj_set=None):
         cur.execute("SELECT child_object_id FROM membership WHERE parent_object_id!=1")
         non_sys_members = set([row[0] for row in cur.fetchall()])
         obj_set = sys_members - non_sys_members
-    cur.execute("SELECT child_object_id FROM membership WHERE parent_object_id=?", (obj_id,))
+    cur.execute(
+        "SELECT child_object_id FROM membership WHERE parent_object_id=?", (obj_id,)
+    )
     ret_set = set([row[0] for row in cur.fetchall()])
-    #for row in cur.fetchall():
+    # for row in cur.fetchall():
     #    ret_list.append(row[0])
-    cur.execute("""SELECT m.child_object_id FROM tag t
+    cur.execute(
+        """SELECT m.child_object_id FROM tag t
     INNER JOIN property p ON p.property_id=d.property_id
     INNER JOIN data d ON t.data_id=d.data_id
     INNER JOIN membership m ON m.membership_id=d.membership_id
-    WHERE t.object_id=?""", (obj_id,))
+    WHERE t.object_id=?""",
+        (obj_id,),
+    )
     ret_set = ret_set | set([row[0] for row in cur.fetchall()])
     new_obj_ids = ret_set - obj_set
     total_set = ret_set | obj_set
@@ -278,10 +338,11 @@ def get_related_objects(coad_obj, obj_id, obj_set=None):
         total_set = new_obj_set | total_set
     return total_set
 
+
 def get_all_objects(coad_obj):
     """get all objects
 
-        Return set of obj_ids with duplicates removed
+    Return set of obj_ids with duplicates removed
     """
 
     cur = coad_obj.dbcon.cursor()
@@ -292,64 +353,80 @@ def get_all_objects(coad_obj):
     return all_objs
 
 
-def write_csv_dict(coad_obj,cur,csv_dict,folder,cls_name):
-            # Write file for this class
-        if len(csv_dict.keys()) > 0:
-            filename = os.path.join(folder, "%s.csv"%cls_name)
-            print("Writing %s"%filename)
-            # Get all columns
-            colnames = []
-            for (oid, dat) in csv_dict.items():
-                colnames = list(set(colnames) | set(dat.keys()))
-            #print ("Columns:", colnames)
-            with open(filename, 'w') as csvfile:
-                csvwriter = csv.writer(csvfile)
-                # Write header
-                csvwriter.writerow(['object','category'] + colnames)
-                for (oid, dat) in csv_dict.items():
-                    # Get object name
-                    cur.execute("SELECT name FROM object o WHERE object_id=?", (oid,))
-                    row = [cur.fetchone()[0]]
-                    row.append(coad_obj.coad.get_by_object_id(oid).get_category())
-                    # Write row
-                    for x in colnames:
-                        if x in dat:
-                            if isinstance(dat[x],dict):
-                                ro = {}
-                                rf = {}
-                                for ditem in dat[x]:
-                                    dnames = ditem.split('.',1)
-                                    if dnames[0] == 'Scenario':
-                                        if 'Read Order' in coad_obj.coad[dnames[0]][dnames[1]]:
-                                            ro[coad_obj.coad[dnames[0]][dnames[1]]['Read Order']] = ditem
-                                        else:
-                                            ro['0_' + dnames[1]] = ditem
+def write_csv_dict(coad_obj, cur, csv_dict, folder, cls_name):
+    # Write file for this class
+    if len(csv_dict.keys()) > 0:
+        filename = os.path.join(folder, "%s.csv" % cls_name)
+        print("Writing %s" % filename)
+        # Get all columns
+        colnames = []
+        for oid, dat in csv_dict.items():
+            colnames = list(set(colnames) | set(dat.keys()))
+        # print ("Columns:", colnames)
+        with open(filename, "w") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            # Write header
+            csvwriter.writerow(["object", "category"] + colnames)
+            for oid, dat in csv_dict.items():
+                # Get object name
+                cur.execute("SELECT name FROM object o WHERE object_id=?", (oid,))
+                row = [cur.fetchone()[0]]
+                row.append(coad_obj.coad.get_by_object_id(oid).get_category())
+                # Write row
+                for x in colnames:
+                    if x in dat:
+                        if isinstance(dat[x], dict):
+                            ro = {}
+                            rf = {}
+                            for ditem in dat[x]:
+                                dnames = ditem.split(".", 1)
+                                if dnames[0] == "Scenario":
+                                    if (
+                                        "Read Order"
+                                        in coad_obj.coad[dnames[0]][dnames[1]]
+                                    ):
+                                        ro[
+                                            coad_obj.coad[dnames[0]][dnames[1]][
+                                                "Read Order"
+                                            ]
+                                        ] = ditem
                                     else:
-                                        rf[dnames[1]] = ditem
-                                rokeys = list(ro.keys())
-                                rokeys.sort()
-                                rokeys = list(rf.keys()) + rokeys
-                                ro.update(rf)
-                                dat[x] = dat[x][ro[rokeys[-1]]] #only write the last value
-                            row.append(dat[x])
-                        else:
-                            row.append("")
-                    csvwriter.writerow(row)
-        else:
-            print("Class %s has no object data"%cls_name)
+                                        ro["0_" + dnames[1]] = ditem
+                                else:
+                                    rf[dnames[1]] = ditem
+                            rokeys = list(ro.keys())
+                            rokeys.sort()
+                            rokeys = list(rf.keys()) + rokeys
+                            ro.update(rf)
+                            dat[x] = dat[x][ro[rokeys[-1]]]  # only write the last value
+                        row.append(dat[x])
+                    else:
+                        row.append("")
+                csvwriter.writerow(row)
+    else:
+        print("Class %s has no object data" % cls_name)
 
-def create_csv_dict(coad_obj,cls_name,cur,obj_list_super,all_interesting_objs,tagset):
+
+def create_csv_dict(
+    coad_obj, cls_name, cur, obj_list_super, all_interesting_objs, tagset
+):
     csv_dict = {}
     # Get attributes
     istart = 0
-    delta = 999 #max number of sql variables
-    while istart < len(obj_list_super): # this breaks on large datasets, so limit query sizes...
-        obj_list = obj_list_super[istart:istart+delta]
-        #start_time = time.time()
-        cur.execute("""SELECT ad.object_id, a.name, ad.value FROM attribute_data ad
+    delta = 999  # max number of sql variables
+    while istart < len(
+        obj_list_super
+    ):  # this breaks on large datasets, so limit query sizes...
+        obj_list = obj_list_super[istart : istart + delta]
+        # start_time = time.time()
+        cur.execute(
+            """SELECT ad.object_id, a.name, ad.value FROM attribute_data ad
             INNER JOIN attribute a ON a.attribute_id=ad.attribute_id
-            WHERE ad.object_id IN (%s)"""%",".join(["?"]*len(obj_list)),obj_list)
-        #print("--- %s seconds ---" % (time.time() - start_time))
+            WHERE ad.object_id IN (%s)"""
+            % ",".join(["?"] * len(obj_list)),
+            obj_list,
+        )
+        # print("--- %s seconds ---" % (time.time() - start_time))
         for row in cur.fetchall():
             if row[0] not in csv_dict:
                 csv_dict[row[0]] = {}
@@ -359,72 +436,105 @@ def create_csv_dict(coad_obj,cls_name,cur,obj_list_super,all_interesting_objs,ta
                     obj_dict[row[1]] = [obj_dict[row[1]]]
                 obj_dict[row[1]].append(row[2])
             else:
-                obj_dict[row[1]]=row[2]
+                obj_dict[row[1]] = row[2]
         istart += delta
     # New way to get properties and text
     for obj_id in obj_list_super:
         obj = coad_obj.coad.get_by_object_id(obj_id)
-        #for o_props in (obj.get_properties(), obj.get_text()):
+        # for o_props in (obj.get_properties(), obj.get_text()):
         o_props = obj.get_properties()
         # By object, get_properties and get_text returns a dict of tag:propname:value(s)
         # Needs to be transformed to propname:tag:values
         if obj_id not in csv_dict:
             csv_dict[obj_id] = {}
-        props_dict = dict([[s.split('.',1)[1],s] for s in list(o_props.keys())])
-        cur.execute("""SELECT o.object_id, o.name FROM object o
-            WHERE o.name IN (%s)"""%",".join(["?"]*len(props_dict)),list(props_dict.keys()))
-        props_dict = dict([[i[0],props_dict[i[1]]] for i in cur.fetchall()])
-        filtered_props = [props_dict[i] for i in list(set(props_dict.keys()).intersection(all_interesting_objs))]
+        props_dict = dict([[s.split(".", 1)[1], s] for s in list(o_props.keys())])
+        cur.execute(
+            """SELECT o.object_id, o.name FROM object o
+            WHERE o.name IN (%s)"""
+            % ",".join(["?"] * len(props_dict)),
+            list(props_dict.keys()),
+        )
+        props_dict = dict([[i[0], props_dict[i[1]]] for i in cur.fetchall()])
+        filtered_props = [
+            props_dict[i]
+            for i in list(set(props_dict.keys()).intersection(all_interesting_objs))
+        ]
 
-        for (tagname, pdict) in o_props.items():
+        for tagname, pdict in o_props.items():
             if tagname in filtered_props:
-                [tagclass,tagval] = tagname.split('.',1)
-                for (propname, values) in pdict.items():
-                    if tagclass not in ['Scenario','System']:
-                        if tagclass in ['Data File','Escalator']:
+                [tagclass, tagval] = tagname.split(".", 1)
+                for propname, values in pdict.items():
+                    if tagclass not in ["Scenario", "System"]:
+                        if tagclass in ["Data File", "Escalator"]:
                             values = tagname
-                        propname += "." +tagclass
+                        propname += "." + tagclass
                     if propname not in csv_dict[obj_id]:
                         csv_dict[obj_id][propname] = {}
                     if tagname in csv_dict[obj_id][propname]:
-                        print("Duplicate name: %s Object: %s Tag: %s Oldval: %s Newval: %s "%(propname, obj_id, tagname, csv_dict[obj_id][propname][tagname], values))
+                        print(
+                            "Duplicate name: %s Object: %s Tag: %s Oldval: %s Newval: %s "
+                            % (
+                                propname,
+                                obj_id,
+                                tagname,
+                                csv_dict[obj_id][propname][tagname],
+                                values,
+                            )
+                        )
                     csv_dict[obj_id][propname][tagname] = values
 
         o_props = obj.get_text()
         # Text objects overwrite properties, so rename property to propname(text)
         if obj_id not in csv_dict:
             csv_dict[obj_id] = {}
-        for (tagname, pdict) in o_props.items():
-            [tagclass,tagval] = tagname.split('.',1)
-            value = coad_obj.coad[tagclass][tagval].meta['object_id']
-            if value not in all_interesting_objs: #add tags that dont exist in classmap to a new map, then append existing csv's or write new ones
+        for tagname, pdict in o_props.items():
+            [tagclass, tagval] = tagname.split(".", 1)
+            value = coad_obj.coad[tagclass][tagval].meta["object_id"]
+            if (
+                value not in all_interesting_objs
+            ):  # add tags that dont exist in classmap to a new map, then append existing csv's or write new ones
                 tagset = tagset | set([value])
-            for (propname, values) in pdict.items():
+            for propname, values in pdict.items():
                 propname += "(text)"
                 if propname not in csv_dict[obj_id]:
                     csv_dict[obj_id][propname] = {}
                 if tagname in csv_dict[obj_id][propname]:
-                    print("Duplicate name: %s Object: %s Tag: %s Oldval: %s Newval: %s "%(propname, obj_id, tagname, csv_dict[obj_id][propname][tagname], values))
+                    print(
+                        "Duplicate name: %s Object: %s Tag: %s Oldval: %s Newval: %s "
+                        % (
+                            propname,
+                            obj_id,
+                            tagname,
+                            csv_dict[obj_id][propname][tagname],
+                            values,
+                        )
+                    )
                 csv_dict[obj_id][propname][tagname] = values
 
     # Get tags
     # Get children listed under class name
     istart = 0
-    delta = 999 #max number of sql variables
-    while istart < len(obj_list_super): # this breaks on large datasets, so limit query sizes...
-        obj_list = obj_list_super[istart:istart+delta]
-        #start_time = time.time()
-        cur.execute("""SELECT m.parent_object_id, c.name, o.name FROM membership m
+    delta = 999  # max number of sql variables
+    while istart < len(
+        obj_list_super
+    ):  # this breaks on large datasets, so limit query sizes...
+        obj_list = obj_list_super[istart : istart + delta]
+        # start_time = time.time()
+        cur.execute(
+            """SELECT m.parent_object_id, c.name, o.name FROM membership m
             INNER JOIN class c ON c.class_id=m.child_class_id
             INNER JOIN object o ON o.object_id=m.child_object_id
-            WHERE m.parent_object_id IN (%s)"""%",".join(["?"]*len(obj_list)),obj_list)
+            WHERE m.parent_object_id IN (%s)"""
+            % ",".join(["?"] * len(obj_list)),
+            obj_list,
+        )
         for row in cur.fetchall():
             (obj_id, name, value) = row
             if obj_id not in csv_dict:
                 csv_dict[obj_id] = {}
             obj_dict = csv_dict[obj_id]
             if name in obj_dict:
-                if isinstance(obj_dict[name],basestring):
+                if isinstance(obj_dict[name], basestring):
                     obj_dict[name] = [obj_dict[name]]
                 obj_dict[name].append(value)
             else:
@@ -432,72 +542,233 @@ def create_csv_dict(coad_obj,cls_name,cur,obj_list_super,all_interesting_objs,ta
         istart += delta
     return csv_dict, tagset
 
-def create_class_map(cur,interesting_objs):
+
+def get_time_varying_data(cur, obj_list_super, prefix=""):
+    """Query database for time-varying properties (date_from, date_to, timeslice).
+
+    Returns list of row tuples and column names, or (None, None) if no data found.
+    Follows the same batching pattern as other data collection functions.
+    """
+    if not obj_list_super:
+        return None, None
+
+    # Find the Timeslice class id dynamically by name
+    timeslice_class_id = None
+    try:
+        cur.execute(
+            f"SELECT class_id FROM {prefix}class WHERE name = ? LIMIT 1", ("Timeslice",)
+        )
+        row = cur.fetchone()
+        if row:
+            timeslice_class_id = row[0]
+        else:
+            cur.execute(
+                f"SELECT class_id FROM {prefix}class WHERE lower(name) LIKE ? LIMIT 1",
+                ("%timeslice%",),
+            )
+            row = cur.fetchone()
+            if row:
+                timeslice_class_id = row[0]
+    except Exception:
+        pass
+
+    # Batch the query to avoid large IN (...) lists (same pattern as create_csv_dict)
+    rows_all = []
+    cols = None
+    delta = 999  # match the delta used in create_csv_dict
+    istart = 0
+
+    while istart < len(obj_list_super):
+        batch = obj_list_super[istart : istart + delta]
+        placeholders = ",".join(["?"] * len(batch))
+
+        query = (
+            f"""
+            SELECT
+                c.name as class,
+                o.name as object,
+                p.name as property,
+                d.value,
+                df.date as date_from,
+                dt.date as date_to,
+                CASE WHEN ts_obj.class_id = ? THEN ts_obj.name ELSE NULL END as timeslice,
+                d.data_id
+            FROM {prefix}data d
+            JOIN {prefix}property p ON d.property_id = p.property_id
+            JOIN {prefix}membership m ON d.membership_id = m.membership_id
+            JOIN {prefix}object o ON m.child_object_id = o.object_id
+            JOIN {prefix}class c ON o.class_id = c.class_id
+            LEFT JOIN {prefix}date_from df ON d.data_id = df.data_id
+            LEFT JOIN {prefix}date_to dt ON d.data_id = dt.data_id
+            LEFT JOIN {prefix}tag t ON d.data_id = t.data_id
+            LEFT JOIN {prefix}object ts_obj ON t.object_id = ts_obj.object_id
+            WHERE (df.data_id IS NOT NULL OR dt.data_id IS NOT NULL OR t.data_id IS NOT NULL)
+              AND m.child_object_id IN (%s)
+        """
+            % placeholders
+        )
+
+        params = [timeslice_class_id if timeslice_class_id is not None else -1]
+        params.extend(batch)
+
+        try:
+            cur.execute(query, params)
+            fetched = cur.fetchall()
+            if fetched:
+                rows_all.extend(fetched)
+                if cols is None:
+                    cols = [d[0] for d in cur.description]
+        except Exception:
+            # Silent failure for individual batches - continue processing
+            pass
+
+        istart += delta
+
+    return rows_all if rows_all else None, cols
+
+
+def write_time_varying_csv(rows, cols, folder):
+    """Write time-varying properties data to CSV.
+
+    Follows the same pattern as write_csv_dict but for row-based data.
+    """
+    if not rows or not cols:
+        return
+
+    filename = os.path.join(folder, "Time varying properties.csv")
+    print("Writing %s" % filename)
+
+    try:
+        df = pd.DataFrame(rows, columns=cols)
+        # Normalize values column: decode bytes if needed
+        if "value" in df.columns:
+            df["value"] = df["value"].apply(
+                lambda x: x.decode() if isinstance(x, (bytes, bytearray)) else x
+            )
+        df.to_csv(filename, index=False)
+    except Exception as e:
+        print("Failed to write Time varying properties.csv:", e)
+
+
+def create_class_map(cur, interesting_objs):
     class_map = {}
     for c_obj in interesting_objs:
-        cur.execute("""SELECT c.name FROM object o
+        cur.execute(
+            """SELECT c.name FROM object o
             INNER JOIN class c ON c.class_id=o.class_id
-            WHERE o.object_id=?""",(c_obj,))
+            WHERE o.object_id=?""",
+            (c_obj,),
+        )
         t_cls = cur.fetchone()[0]
         if t_cls not in class_map:
             class_map[t_cls] = []
         class_map[t_cls].append(c_obj)
     return class_map
 
-def write_object_report(coad_obj, interesting_objs = None,folder=None):
+
+def write_object_report(coad_obj, interesting_objs=None, folder=None):
     """Retrieve all associated objects to coad_obj, pull in attributes, properties,
     and texts.  Write as a series of CSV files in folder.
     """
 
     if interesting_objs is None:
-        interesting_objs = get_related_objects(coad_obj.coad, coad_obj.meta['object_id'])
+        interesting_objs = get_related_objects(
+            coad_obj.coad, coad_obj.meta["object_id"]
+        )
 
     cur = coad_obj.coad.dbcon.cursor()
     if folder is None:
-        folder = coad_obj.meta['name']
-    print("Writing report on %s objects to %s"%(len(interesting_objs), folder))
+        folder = coad_obj.meta["name"]
+    print("Writing report on %s objects to %s" % (len(interesting_objs), folder))
     if not os.path.isdir(folder):
-        print("Creating report folder %s"%folder)
+        print("Creating report folder %s" % folder)
         os.makedirs(folder)
+
+    # Detect whether DB tables are prefixed with t_
+    prefix = ""
+    try:
+        cur.execute("SELECT 1 FROM t_class LIMIT 1")
+        prefix = "t_"
+    except Exception:
+        prefix = ""
+
     # Create class mapping dict
-    class_map = create_class_map(cur,interesting_objs)
-    all_interesting_objs = set([item for sublist in class_map.values() for item in sublist]) | set([1])
+    class_map = create_class_map(cur, interesting_objs)
+    all_interesting_objs = set(
+        [item for sublist in class_map.values() for item in sublist]
+    ) | set([1])
     tagset = set()
+
+    # Write main object class CSVs
     for cls_name, obj_list_super in class_map.items():
-        #for obj_id in class_map[cls_name]:
-        csv_dict, tagset = create_csv_dict(coad_obj,cls_name,cur,obj_list_super,all_interesting_objs,tagset)
-        write_csv_dict(coad_obj,cur,csv_dict,folder,cls_name)
-    #print class_map
+        csv_dict, tagset = create_csv_dict(
+            coad_obj, cls_name, cur, obj_list_super, all_interesting_objs, tagset
+        )
+        write_csv_dict(coad_obj, cur, csv_dict, folder, cls_name)
 
-    #do it again for the objects identified with tags
-    tag_class_map = create_class_map(cur,tagset)
-    tag_all_interesting_objs = set([item for sublist in tag_class_map.values() for item in sublist])
+    # Do it again for the objects identified with tags (first pass)
+    tag_class_map = create_class_map(cur, tagset)
+    tag_all_interesting_objs = set(
+        [item for sublist in tag_class_map.values() for item in sublist]
+    )
     tag_tagset = set()
     for tag_cls_name, tag_obj_list_super in tag_class_map.items():
-        #for obj_id in class_map[cls_name]:
-        tag_csv_dict, tag_tagset = create_csv_dict(coad_obj,tag_cls_name,cur,tag_obj_list_super,tag_all_interesting_objs,tag_tagset)
-        write_csv_dict(coad_obj,cur,tag_csv_dict,folder,tag_cls_name)
+        tag_csv_dict, tag_tagset = create_csv_dict(
+            coad_obj,
+            tag_cls_name,
+            cur,
+            tag_obj_list_super,
+            tag_all_interesting_objs,
+            tag_tagset,
+        )
+        write_csv_dict(coad_obj, cur, tag_csv_dict, folder, tag_cls_name)
 
-
-    #do it again for the objects identified with tags
-    tag_class_map = create_class_map(cur,tagset)
-    tag_all_interesting_objs = set([item for sublist in tag_class_map.values() for item in sublist])
+    # Do it again for the objects identified with tags (second pass)
+    tag_class_map = create_class_map(cur, tagset)
+    tag_all_interesting_objs = set(
+        [item for sublist in tag_class_map.values() for item in sublist]
+    )
     tag_tagset = set()
     for tag_cls_name, tag_obj_list_super in tag_class_map.items():
-        #for obj_id in class_map[cls_name]:
-        tag_csv_dict, tag_tagset = create_csv_dict(coad_obj,tag_cls_name,cur,tag_obj_list_super,tag_all_interesting_objs,tag_tagset)
-        write_csv_dict(coad_obj,cur,tag_csv_dict,folder,tag_cls_name)
+        tag_csv_dict, tag_tagset = create_csv_dict(
+            coad_obj,
+            tag_cls_name,
+            cur,
+            tag_obj_list_super,
+            tag_all_interesting_objs,
+            tag_tagset,
+        )
+        write_csv_dict(coad_obj, cur, tag_csv_dict, folder, tag_cls_name)
+
+    # Collect and write time-varying properties for all interesting objects
+    # This follows the same pattern: collect data, then write
+    obj_list_all = list(all_interesting_objs)
+    rows, cols = get_time_varying_data(cur, obj_list_all, prefix=prefix)
+    if rows and cols:
+        write_time_varying_csv(rows, cols, folder)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export csv files for a specific PLEXOS input model")
+    parser = argparse.ArgumentParser(
+        description="Export csv files for a specific PLEXOS input model"
+    )
 
-    parser.add_argument('-f', '--filepath', help='path to PLEXOS input .xml or .db')
-    parser.add_argument('-a', '--all', help='all objects in dataset',default='True')
-    parser.add_argument('-m', '--models', help='list of models to export',default='')
-    parser.add_argument('-c', '--filter_cls', help='optional-class of filter string, e.g. Region, Zone',default='')
-    parser.add_argument('-n', '--filter_val', help='optional-name of region or zone to extract',default='')
-    parser.add_argument('-o', '--output_folder', help='folder to output csv files')
+    parser.add_argument("-f", "--filepath", help="path to PLEXOS input .xml or .db")
+    parser.add_argument("-a", "--all", help="all objects in dataset", default="True")
+    parser.add_argument("-m", "--models", help="list of models to export", default="")
+    parser.add_argument(
+        "-c",
+        "--filter_cls",
+        help="optional-class of filter string, e.g. Region, Zone",
+        default="",
+    )
+    parser.add_argument(
+        "-n",
+        "--filter_val",
+        help="optional-name of region or zone to extract",
+        default="",
+    )
+    parser.add_argument("-o", "--output_folder", help="folder to output csv files")
 
     args = parser.parse_args()
 
@@ -507,11 +778,16 @@ def main():
     coad = COAD(args.filepath)
     if args.all:
         all_objs = get_all_objects(coad)
-        write_object_report(coad['System']['System'],interesting_objs = all_objs, folder = args.output_folder)
+        write_object_report(
+            coad["System"]["System"],
+            interesting_objs=all_objs,
+            folder=args.output_folder,
+        )
     else:
         for m in args.models:
-            write_object_report(coad['Model'][m],interesting_objs = None, folder = args.output_folder)
-
+            write_object_report(
+                coad["Model"][m], interesting_objs=None, folder=args.output_folder
+            )
 
 
 if __name__ == "__main__":

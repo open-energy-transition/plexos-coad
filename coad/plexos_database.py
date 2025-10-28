@@ -244,52 +244,99 @@ def load(source, dbfilename=None, create_db_file=True, remove_invalid_chars=Fals
     dbcon.execute("CREATE INDEX object_class_id_and_name_idx ON object (class_id, name)")
     # Create view of properties that matches spreadsheet
     if 'data' in tables:
-        cmd = """CREATE VIEW property_spreadsheet AS SELECT pc.name AS parent_class,
-        cc.name AS child_class,
-        col.name AS collection,
-        po.name AS parent_object,
-        co.name AS child_object,
-        p.name AS property,
-        CASE WHEN b.band_id IS NULL
-        THEN 1
-        ELSE b.band_id END AS band_id,
-        d.value AS value,
-        u.value AS units,
-        df.date AS date_from,
-        dt.date AS date_to,
-        pat.value AS pattern, -- text for class Timeslice
-        var.action_symbol AS action, -- exist for tags with class Variable
-        '{Object}'||var.name AS variable, -- tags with class Variable
-        fn.value AS filename, -- text for class Data File
-        '{Object}'||scen.name AS scenario, -- tags with class Scenario
-        md.value AS memo,
-        p.period_type_id AS period_type_id,
-        d.data_id AS data_id
-        FROM data d
-        INNER JOIN membership m ON m.membership_id=d.membership_id
-        INNER JOIN class pc ON pc.class_id=m.parent_class_id
-        INNER JOIN class cc ON cc.class_id=m.child_class_id
-        INNER JOIN collection col ON m.collection_id=col.collection_id
-        INNER JOIN object po ON po.object_id=m.parent_object_id
-        INNER JOIN object co ON co.object_id=m.child_object_id
-        INNER JOIN property p ON p.property_id=d.property_id
-        INNER JOIN unit u ON u.unit_id=p.unit_id
-        LEFT OUTER JOIN band b ON b.data_id=d.data_id
-        LEFT OUTER JOIN date_from df ON df.data_id=d.data_id
-        LEFT OUTER JOIN date_to dt ON dt.data_id=d.data_id
-        LEFT OUTER JOIN text pat ON pat.data_id=d.data_id AND pat.class_id=(SELECT class_id FROM class WHERE name='Timeslice')
-        LEFT OUTER JOIN (SELECT o.name, t.data_id, a.action_symbol FROM tag t
-            INNER JOIN object o ON t.object_id=o.object_id
-            INNER JOIN class c ON c.class_id=o.class_id AND c.name='Variable'
-            INNER JOIN action a ON a.action_id=t.action_id
-            ) var ON d.data_id=var.data_id
-        LEFT OUTER JOIN text fn ON fn.data_id=d.data_id AND fn.class_id=(SELECT class_id FROM class WHERE name='Data File')
-        LEFT OUTER JOIN (SELECT o.name, t.data_id FROM tag t
-            INNER JOIN object o ON t.object_id=o.object_id
-            INNER JOIN class c ON c.class_id=o.class_id AND c.name='Scenario'
-            ) scen ON d.data_id=scen.data_id
-        LEFT OUTER JOIN memo_data md ON md.data_id=d.data_id
-        """
+
+        if 'memo_data' in tables:
+            cmd = """CREATE VIEW property_spreadsheet AS SELECT pc.name AS parent_class,
+            cc.name AS child_class,
+            col.name AS collection,
+            po.name AS parent_object,
+            co.name AS child_object,
+            p.name AS property,
+            CASE WHEN b.band_id IS NULL
+            THEN 1
+            ELSE b.band_id END AS band_id,
+            d.value AS value,
+            u.value AS units,
+            df.date AS date_from,
+            dt.date AS date_to,
+            pat.value AS pattern, -- text for class Timeslice
+            var.action_symbol AS action, -- exist for tags with class Variable
+            '{Object}'||var.name AS variable, -- tags with class Variable
+            fn.value AS filename, -- text for class Data File
+            '{Object}'||scen.name AS scenario, -- tags with class Scenario
+            md.value AS memo,
+            p.period_type_id AS period_type_id,
+            d.data_id AS data_id
+            FROM data d
+            INNER JOIN membership m ON m.membership_id=d.membership_id
+            INNER JOIN class pc ON pc.class_id=m.parent_class_id
+            INNER JOIN class cc ON cc.class_id=m.child_class_id
+            INNER JOIN collection col ON m.collection_id=col.collection_id
+            INNER JOIN object po ON po.object_id=m.parent_object_id
+            INNER JOIN object co ON co.object_id=m.child_object_id
+            INNER JOIN property p ON p.property_id=d.property_id
+            INNER JOIN unit u ON u.unit_id=p.unit_id
+            LEFT OUTER JOIN band b ON b.data_id=d.data_id
+            LEFT OUTER JOIN date_from df ON df.data_id=d.data_id
+            LEFT OUTER JOIN date_to dt ON dt.data_id=d.data_id
+            LEFT OUTER JOIN text pat ON pat.data_id=d.data_id AND pat.class_id=(SELECT class_id FROM class WHERE name='Timeslice')
+            LEFT OUTER JOIN (SELECT o.name, t.data_id, a.action_symbol FROM tag t
+                INNER JOIN object o ON t.object_id=o.object_id
+                INNER JOIN class c ON c.class_id=o.class_id AND c.name='Variable'
+                INNER JOIN action a ON a.action_id=t.action_id
+                ) var ON d.data_id=var.data_id
+            LEFT OUTER JOIN text fn ON fn.data_id=d.data_id AND fn.class_id=(SELECT class_id FROM class WHERE name='Data File')
+            LEFT OUTER JOIN (SELECT o.name, t.data_id FROM tag t
+                INNER JOIN object o ON t.object_id=o.object_id
+                INNER JOIN class c ON c.class_id=o.class_id AND c.name='Scenario'
+                ) scen ON d.data_id=scen.data_id
+            LEFT OUTER JOIN memo_data md ON md.data_id=d.data_id
+            """
+        else:
+            cmd = """CREATE VIEW property_spreadsheet AS SELECT pc.name AS parent_class,
+            cc.name AS child_class,
+            col.name AS collection,
+            po.name AS parent_object,
+            co.name AS child_object,
+            p.name AS property,
+            CASE WHEN b.band_id IS NULL
+            THEN 1
+            ELSE b.band_id END AS band_id,
+            d.value AS value,
+            u.value AS units,
+            df.date AS date_from,
+            dt.date AS date_to,
+            pat.value AS pattern, -- text for class Timeslice
+            var.action_symbol AS action, -- exist for tags with class Variable
+            '{Object}'||var.name AS variable, -- tags with class Variable
+            fn.value AS filename, -- text for class Data File
+            '{Object}'||scen.name AS scenario, -- tags with class Scenario
+            p.period_type_id AS period_type_id,
+            d.data_id AS data_id
+            FROM data d
+            INNER JOIN membership m ON m.membership_id=d.membership_id
+            INNER JOIN class pc ON pc.class_id=m.parent_class_id
+            INNER JOIN class cc ON cc.class_id=m.child_class_id
+            INNER JOIN collection col ON m.collection_id=col.collection_id
+            INNER JOIN object po ON po.object_id=m.parent_object_id
+            INNER JOIN object co ON co.object_id=m.child_object_id
+            INNER JOIN property p ON p.property_id=d.property_id
+            INNER JOIN unit u ON u.unit_id=p.unit_id
+            LEFT OUTER JOIN band b ON b.data_id=d.data_id
+            LEFT OUTER JOIN date_from df ON df.data_id=d.data_id
+            LEFT OUTER JOIN date_to dt ON dt.data_id=d.data_id
+            LEFT OUTER JOIN text pat ON pat.data_id=d.data_id AND pat.class_id=(SELECT class_id FROM class WHERE name='Timeslice')
+            LEFT OUTER JOIN (SELECT o.name, t.data_id, a.action_symbol FROM tag t
+                INNER JOIN object o ON t.object_id=o.object_id
+                INNER JOIN class c ON c.class_id=o.class_id AND c.name='Variable'
+                INNER JOIN action a ON a.action_id=t.action_id
+                ) var ON d.data_id=var.data_id
+            LEFT OUTER JOIN text fn ON fn.data_id=d.data_id AND fn.class_id=(SELECT class_id FROM class WHERE name='Data File')
+            LEFT OUTER JOIN (SELECT o.name, t.data_id FROM tag t
+                INNER JOIN object o ON t.object_id=o.object_id
+                INNER JOIN class c ON c.class_id=o.class_id AND c.name='Scenario'
+                ) scen ON d.data_id=scen.data_id
+            """
         try:
             dbcon.execute(cmd)
         except:
